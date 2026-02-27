@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Recommendation System</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .spinner-border {
+            display: none;
+        }
+        .spinner-border.show {
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">Job Recommendation System</h1>
+        <form id="jobForm" class="mt-4">
+            <div class="form-group">
+                <label for="skills">Skills:</label>
+                <input type="text" class="form-control" id="skills" placeholder="Enter skills separated by commas" required>
+            </div>
+            <div class="form-group">
+                <label for="location">Location:</label>
+                <input type="text" class="form-control" id="location" placeholder="Enter your preferred location" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Get Recommendations</button>
+            <div class="spinner-border text-primary mt-3" role="status" id="loadingSpinner">
+                <span class="sr-only">Loading...</span>
+            </div>
+        </form>
+
+        <div id="recommendationCards" class="mt-4">
+            <!-- Job recommendation cards will be inserted here -->
+        </div>
+        <div id="skillGap" class="mt-4">
+            <h5>Skill Gap Analysis</h5>
+            <p id="gapAnalysis"></p>
+        </div>
+        <div id="errorMsg" class="alert alert-danger mt-4" style="display:none;">
+            <strong>Error:</strong> <span id="errorText"></span>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('jobForm').onsubmit = function(e) {
+            e.preventDefault();
+            document.getElementById('loadingSpinner').classList.add('show');
+            document.getElementById('recommendationCards').innerHTML = '';
+            document.getElementById('errorMsg').style.display = 'none';
+
+            // Simulated API call
+            setTimeout(function() {
+                // Example recommendations
+                const recommendations = [
+                    { title: 'Software Engineer', company: 'ABC Corp' },
+                    { title: 'Frontend Developer', company: 'XYZ Ltd' }
+                ];
+                const gapAnalysis = 'You may need to improve your JavaScript skills.';
+
+                if (recommendations.length === 0) {
+                    document.getElementById('errorMsg').style.display = 'block';
+                    document.getElementById('errorText').innerText = 'No job recommendations found.';
+                } else {
+                    recommendations.forEach(job => {
+                        const card = `<div class='card mb-3'><div class='card-body'><h5 class='card-title'>${job.title}</h5><p class='card-text'>Company: ${job.company}</p></div></div>`;
+                        document.getElementById('recommendationCards').insertAdjacentHTML('beforeend', card);
+                    });
+                }
+                document.getElementById('gapAnalysis').innerText = gapAnalysis;
+                document.getElementById('loadingSpinner').classList.remove('show');
+            }, 3000);
+        };
+    </script>
+</body>
+</html>
