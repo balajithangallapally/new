@@ -1,110 +1,111 @@
 from flask import Flask, render_template, request, jsonify
-from flask_cors import CORS
-import pandas as pd
 from model.recommender import JobRecommender
-from model.preprocess import TextPreprocessor
+from model.preprocess import PreProcessor
+import pandas as pd
 import logging
-import os
-from dotenv import load_dotenv
+from datetime import datetime
+import traceback
 
-# Load environment variables
-load_dotenv()
+app = Flask(__name__)
+app.config['JSON_SORT_KEYS'] = False
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
-CORS(app)
-
-# Initialize recommender system
+# Initialize components
+preprocessor = PreProcessor()
 recommender = JobRecommender()
-preprocessor = TextPreprocessor()
 
 @app.route('/')
-def index():
-    """Render home page"""
-    try:
-        return render_template('index.html')
-    except Exception as e:
-        logger.error(f"Error rendering index: {str(e)}")
-        return jsonify({'error': 'Failed to load page'}), 500
+def home():
+    """Render the home page with input form."""
+    return render_template('index.html')
 
 @app.route('/recommend', methods=['POST'])
 def recommend():
     """
-    Handle job recommendation requests
-    Expected JSON: {'skills': 'python, sql, machine learning'}
+    Handle job recommendation request.
+    
+    Expected JSON:
+    {
+        "skills": "python, sql, machine learning",
+        "num_results": 10,
+        "location": "United States" (optional)
+    }
     """
     try:
         data = request.get_json()
         
         if not data or 'skills' not in data:
-            return jsonify({'error': 'Skills parameter is required'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'Skills field is required'
+            }), 400
         
-        user_skills = data['skills'].strip()
+        user_skills = data.get('skills', '').strip()
+        num_results = int(data.get('num_results', 10))
+        location = data.get('location', '').strip()
         
         if not user_skills:
-            return jsonify({'error': 'Please enter at least one skill'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'Please enter at least one skill'
+            }), 400
         
-        location = data.get('location', '').strip() if data.get('location') else ''
+        logger.info(f"Recommendation request - Skills: {user_skills}, Location: {location}")
         
-        logger.info(f"Processing recommendation request - Skills: {user_skills}, Location: {location}")
+        # Fetch jobs from API and fallback dataset
+        jobs_df = recommender.fetch_jobs(user_skills, location)
+        
+        if jobs_df.empty:
+            return jsonify({
+                'success': False,
+                'error': 'No jobs found for the given skills. Please try different keywords.'
+            }), 404
         
         # Get recommendations
-        recommendations = recommender.get_recommendations(
-            user_skills=user_skills,
-            location=location,
-            top_n=10
+        recommendations = recommender.recommend(user_skills, jobs_df, num_results)
+        
+        # Calculate skill gap
+        skill_gap = preprocessor.detect_skill_gap(
+            user_skills,
+            jobs_df['description'].tolist()[:20]
         )
         
-        if not recommendations:
-            return jsonify({
-                'success': True,
-                'recommendations': [],
-                'message': 'No jobs found matching your criteria. Please try different skills or location.'
-            }), 200
-        
-        # Extract skill gap
-        skill_gap = recommender.detect_skill_gap(
-            user_skills=user_skills,
-            recommendations=recommendations
-        )
-        
-        return jsonify({
+        response = {
             'success': True,
+            'user_skills': user_skills,
+            'num_jobs_found': len(jobs_df),
             'recommendations': recommendations,
             'skill_gap': skill_gap,
-            'message': f'Found {len(recommendations)} job recommendations'
-        }), 200
-    
-    except ValueError as ve:
-        logger.error(f"Validation error: {str(ve)}")
-        return jsonify({'error': str(ve)}), 400
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        logger.info(f"Generated {len(recommendations)} recommendations")
+        return jsonify(response), 200
+        
     except Exception as e:
-        logger.error(f"Error processing recommendation: {str(e)}")
-        return jsonify({'error': 'An error occurred while processing your request. Please try again.'}), 500
+        logger.error(f"Error in recommendation: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'success': False,
+            'error': f'Internal server error: {str(e)}'
+        }), 500
 
 @app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({'status': 'healthy', 'message': 'Server is running'}), 200
+def health():
+    """Health check endpoint."""
+    return jsonify({'status': 'healthy'}), 200
 
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors"""
-    return jsonify({'error': 'Resource not found'}), 404
+    """Handle 404 errors."""
+    return jsonify({'error': 'Endpoint not found'}), 404
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Handle 500 errors"""
-    logger.error(f"Internal server error: {str(error)}")
+    """Handle 500 errors."""
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    # Development
     app.run(debug=True, host='0.0.0.0', port=5000)
